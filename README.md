@@ -1,2 +1,2 @@
 # Projeto-Infra
-Entrega 1: Estabelecer um Handshake TCP em uma conecção ideal
+Entrega 1: Aplicações cliente e servidor devem se conectar via socket e realizar o handshake inicial (trocando, pelo menos, modo de operação e tamanho máximo).
