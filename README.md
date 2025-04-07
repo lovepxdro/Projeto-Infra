@@ -29,7 +29,7 @@ Membros:
         <sub><b>Vitória Regia</b></sub>
       </a>
       <br>
-      <sub><b>✉️ @cesar.school</b></sub>
+      <sub><b>✉️ vrs@cesar.school</b></sub>
     </td>
   </tr>
 </table>
