@@ -24,7 +24,7 @@ Membros:
     </td>
     <td align="center">
       <a href="https://github.com/vitoriaregia21">
-        <img src="https://avatars.githubusercontent.com/vitoriaregia21z" width="100px;" alt="foto de pablo"/>
+        <img src="https://avatars.githubusercontent.com/vitoriaregia21" width="100px;" alt="foto de pablo"/>
         <br>
         <sub><b>Vitória Regia</b></sub>
       </a>
