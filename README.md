@@ -1,7 +1,10 @@
-# Projeto-Infra
-Entrega 1: Aplicações cliente e servidor devem se conectar via socket e realizar o handshake inicial (trocando, pelo menos, modo de operação e tamanho máximo).
+# Projeto: Infraestrutura de Comunicação
 
-Entrega 2: Troca de mensagens entre cliente e servidor considerando um canal de comunicação erros e perdas não ocorrem.
+Entrega 1:
+As aplicações cliente e servidor devem se conectar via socket e realizar um handshake inicial, trocando pelo menos informações sobre o modo de operação e o tamanho máximo de dados.
+
+Entrega 2:
+Estabelecer a troca de mensagens entre cliente e servidor, garantindo que o canal de comunicação esteja preparado para não apresentar erros ou perdas de dados.
 
 Membros:
 <table>
