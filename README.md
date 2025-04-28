@@ -1,12 +1,33 @@
-# Projeto: Infraestrutura de Comunicação
+#  Projeto: Infraestrutura de Comunicação
 
-Entrega 1:
-As aplicações cliente e servidor devem se conectar via socket e realizar um handshake inicial, trocando pelo menos informações sobre o modo de operação e o tamanho máximo de dados.
+## 📚 Descrição
 
-Entrega 2:
-Estabelecer a troca de mensagens entre cliente e servidor, garantindo que o canal de comunicação esteja preparado para não apresentar erros ou perdas de dados.
+Projeto de implementação de comunicação entre Cliente e Servidor via **sockets TCP**, utilizando técnicas de **handshake**, **controle de fluxo** e **controle de erro** conforme as especificações da disciplina de Infraestrutura de Comunicação.
 
-Membros:
+---
+
+## 📦 Entregas Realizadas
+
+### ✅ Entrega 1
+
+- Conexão Cliente-Servidor via socket TCP.
+- Realização de **handshake inicial** trocando informações:
+  - Protocolo de operação (Go-Back-N ou Selective Repeat).
+  - Tamanho máximo de dados por pacote.
+  - Tamanho da janela de transmissão.
+
+### ✅ Entrega 2
+
+- Estabelecimento da **troca de mensagens confiável** entre Cliente e Servidor.
+- Fragmentação automática das mensagens, respeitando o limite de **3 caracteres** por pacote.
+- Implementação de controle de janela deslizante:
+  - **Go-Back-N**: ACK cumulativo e reenvio de toda a janela em caso de falha.
+  - **Selective Repeat**: ACKs individuais e reenvio apenas dos pacotes perdidos.
+- Controle de **timeout** e **retransmissão automática**.
+
+---
+
+# 👩‍💻 Membros da Equipe
 <table>
   <tr>
     <td align="center">
