@@ -1,140 +1,99 @@
-import socket
+import common_utils
 import time
-import math
-from common_utils import (
-    recv_all, create_data_packet, parse_ack_packet, verify_packet_checksum,
-    ACK_PACKET_LEN, MAX_DATA_SIZE, WINDOW_SIZE,
-    TIMEOUT_SEGUNDOS, MAX_RETRIES, PACKET_TYPE_ACK
-)
 
-host = socket.gethostname()
-port = 8001
-address = (host, port)
+TIMEOUT = 2  # segundos
+MAX_PAYLOAD_SIZE = 3  # máximo de caracteres por pacote
+WINDOW_SIZE = 4  # tamanho da janela
 
-sock = None
-try:
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(TIMEOUT_SEGUNDOS)
-    print(f"Conectando ao servidor {host}:{port}...")
-    sock.connect(address)
-    print("Conectado.")
+def choose_protocol():
+    print("\nEscolha o protocolo de comunicação:")
+    print("1 - Go-Back-N")
+    print("2 - Repetição Seletiva")
+    
+    while True:
+        choice = input("Digite sua escolha (1 ou 2): ")
+        if choice == '1':
+            return "GBN"
+        elif choice == '2':
+            return "SR"
+        else:
+            print("Escolha inválida. Digite 1 ou 2.")
 
-    mensagem_original = input("Digite a mensagem longa para enviar ao servidor: ")
-    mensagem_bytes = mensagem_original.encode('utf-8')
+def print_window(base, next_seq_num):
+    print(f"🪟 Janela atual: {base} - {base + WINDOW_SIZE - 1}")
 
-    segments = []
-    if mensagem_bytes:
-        for i in range(0, len(mensagem_bytes), MAX_DATA_SIZE):
-            segments.append(mensagem_bytes[i:i+MAX_DATA_SIZE])
-    else:
-         segments.append(b'')
+def start_client(host='localhost', port=12345):
+    client_socket = common_utils.create_socket()
+    if client_socket is None:
+        print("Não foi possível criar o socket do cliente.")
+        return
 
-    total_packets = len(segments)
-    print(f"Mensagem dividida em {total_packets} segmentos de até {MAX_DATA_SIZE} bytes.")
+    try:
+        client_socket.connect((host, port))
+        print(f"Conectado ao servidor {host}:{port}")
 
-    send_base = 0
-    next_seq_num = 0
-    timer_start_time = None
-    retransmission_count = 0
+        protocol = choose_protocol()
 
-    print("\n--- Iniciando Transferência ---")
-    while send_base < total_packets:
+        handshake_message = f"PROTOCOLO:{protocol};TAMANHO_JANELA:{WINDOW_SIZE};TAMANHO_PACOTE:{MAX_PAYLOAD_SIZE}"
+        client_socket.sendall(handshake_message.encode())
+        server_response = client_socket.recv(1024)
+        print(f"Resposta do servidor: {server_response.decode()}")
 
-        while next_seq_num < send_base + WINDOW_SIZE and next_seq_num < total_packets:
-            data_segment = segments[next_seq_num]
-            data_packet = create_data_packet(next_seq_num, data_segment)
+        message = input("\nDigite a mensagem para enviar: ")
 
-            print(f"Enviando Pacote SeqNum={next_seq_num} (Janela: [{send_base}...{next_seq_num}], TamDados: {len(data_segment)})...")
-            try:
-                sock.sendall(data_packet)
-                if send_base == next_seq_num:
-                    timer_start_time = time.time()
-                    retransmission_count = 0
-                    print(f"Timer iniciado para SeqNum={send_base}")
+        packets = [message[i:i+MAX_PAYLOAD_SIZE] for i in range(0, len(message), MAX_PAYLOAD_SIZE)]
+        total_packets = len(packets)
+
+        base = 0
+        next_seq_num = 0
+        acked = [False] * total_packets
+        timers = {}
+
+        client_socket.settimeout(0.5)
+
+        print_window(base, next_seq_num)
+
+        while base < total_packets:
+            while next_seq_num < base + WINDOW_SIZE and next_seq_num < total_packets:
+                packet = common_utils.create_packet(next_seq_num % 256, packets[next_seq_num])
+                client_socket.sendall(packet)
+                print(f"Enviado pacote Seq={next_seq_num % 256}, Dados='{packets[next_seq_num]}'")
+                timers[next_seq_num] = time.time()
                 next_seq_num += 1
-            except socket.error as e:
-                print(f"Erro CRÍTICO ao enviar pacote {next_seq_num}: {e}")
-                send_base = total_packets
-                break
 
-        if send_base == total_packets:
-             break
+            try:
+                ack_packet = client_socket.recv(1024)
+                ack_seq = common_utils.parse_ack(ack_packet)
+                print(f"ACK recebido: {ack_seq}")
 
-        timer_expired = False
-        if timer_start_time is not None and (time.time() - timer_start_time) > TIMEOUT_SEGUNDOS:
-            timer_expired = True
-            print(f"TIMEOUT DETECTADO! Nenhum ACK recebido para a base atual SeqNum={send_base}.")
+                if protocol == "GBN":
+                    if ack_seq == base % 256:
+                        base += 1
+                        print_window(base, next_seq_num)
+                elif protocol == "SR":
+                    for idx in range(len(packets)):
+                        if idx % 256 == ack_seq:
+                            acked[idx] = True
+                            print(f"Pacote {idx} confirmado pelo servidor (SR).")
+                            break
+                    while base < total_packets and acked[base]:
+                        base += 1
+                        print_window(base, next_seq_num)
 
-        if timer_expired:
-            timer_start_time = None
-            retransmission_count += 1
-            if retransmission_count > MAX_RETRIES:
-                print(f"Máximo de {MAX_RETRIES} retentativas atingido para SeqNum={send_base}. Abortando.")
-                send_base = total_packets
-                break
+            except Exception:
+                current_time = time.time()
+                for idx in range(base, min(base + WINDOW_SIZE, total_packets)):
+                    if not acked[idx] and (current_time - timers.get(idx, current_time)) > TIMEOUT:
+                        packet = common_utils.create_packet(idx % 256, packets[idx])
+                        client_socket.sendall(packet)
+                        print(f"Timeout! Reenviando pacote Seq={idx % 256}, Dados='{packets[idx]}'")
+                        timers[idx] = time.time()
 
-            if send_base < total_packets:
-                 print(f"Retransmitindo Pacote SeqNum={send_base} (Tentativa {retransmission_count}/{MAX_RETRIES})...")
-                 try:
-                     data_segment = segments[send_base]
-                     data_packet = create_data_packet(send_base, data_segment)
-                     sock.sendall(data_packet)
-                     timer_start_time = time.time()
-                 except socket.error as e:
-                     print(f"Erro CRÍTICO ao retransmitir pacote {send_base}: {e}")
-                     send_base = total_packets
-                     break
-                 except IndexError:
-                     print(f"Erro LÓGICO: Tentando retransmitir índice inválido {send_base}")
-                     send_base = total_packets
-                     break
-            continue
+    except Exception as e:
+        print(f"Erro: {e}")
+    finally:
+        client_socket.close()
+        print("Conexão encerrada.")
 
-        try:
-            sock.settimeout(0.01)
-            ack_packet_bytes = recv_all(sock, ACK_PACKET_LEN)
-            sock.settimeout(TIMEOUT_SEGUNDOS)
-
-            if ack_packet_bytes:
-                if not verify_packet_checksum(ack_packet_bytes):
-                    print("ACK recebido com Checksum INVÁLIDO. Descartando.")
-                else:
-                    packet_type, ack_num, _ = parse_ack_packet(ack_packet_bytes)
-                    if packet_type == PACKET_TYPE_ACK:
-                        print(f"ACK Recebido (Checksum OK): AckNum={ack_num}")
-                        if ack_num >= send_base:
-                            old_base = send_base
-                            send_base = ack_num + 1
-                            print(f"Janela avançou para base={send_base}")
-                            if send_base < next_seq_num:
-                                 timer_start_time = time.time()
-                                 retransmission_count = 0
-                                 print(f"Timer reiniciado para nova base SeqNum={send_base}")
-                            else:
-                                 timer_start_time = None
-                                 print("Todos os pacotes enviados foram confirmados. Timer parado.")
-                        else:
-                            print(f"ACK antigo (AckNum={ack_num} < Base={send_base}). Ignorando.")
-                    else:
-                        print(f"Pacote inesperado (Tipo={packet_type}) recebido. Ignorando.")
-        except socket.timeout:
-            pass
-        except socket.error as e:
-            print(f"Erro de socket ao tentar receber ACK: {e}")
-            send_base = total_packets
-            break
-
-    if send_base >= total_packets:
-        print("\n==> Sucesso: Transferência concluída e todos os pacotes confirmados.")
-    else:
-        print(f"\n==> Falha: Transferência interrompida. Base={send_base}, Total={total_packets}")
-
-except socket.error as e:
-    print(f"Erro de socket (conexão/geral): {e}")
-except Exception as e:
-    print(f"Ocorreu um erro inesperado no cliente: {e}")
-finally:
-    if sock:
-        print("Fechando socket do cliente.")
-        sock.close()
-    print("Cliente encerrado.")
+if __name__ == "__main__":
+    start_client()

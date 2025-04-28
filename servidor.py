@@ -1,121 +1,102 @@
-import socket
-import time
-from common_utils import (
-    recv_all, create_ack_packet, parse_data_header, verify_packet_checksum,
-    DATA_HEADER_LEN, ACK_PACKET_LEN, PACKET_TYPE_DATA
-)
+import common_utils
 
-host = socket.gethostname()
-port = 8001
-address = (host, port)
+MAX_PAYLOAD_SIZE = 3
+BUFFER_SIZE = 1024
 
-server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-server_sock.bind(address)
-server_sock.listen(1)
+def start_server(host='localhost', port=12345):
+    server_socket = common_utils.create_socket()
+    if server_socket is None:
+        print("Não foi possível iniciar o servidor.")
+        return
 
-print(f"Servidor Go-Back-N escutando em {host}:{port}")
+    server_socket.bind((host, port))
+    server_socket.listen(5)
+    print(f"Servidor ouvindo em {host}:{port}")
 
-conn = None
-client_addr = None
-try:
-    print("Aguardando conexão...")
-    conn, client_addr = server_sock.accept()
-    print(f"Conectado a {client_addr}")
+    try:
+        while True:
+            client_socket, addr = server_socket.accept()
+            print(f"\nConexão estabelecida com {addr}")
 
-    expected_seq_num = 0
-    reassembled_data = bytearray()
+            try:
+                handshake = client_socket.recv(BUFFER_SIZE)
+                handshake_info = handshake.decode()
+                print(f"Handshake recebido: {handshake_info}")
 
-    print("\nAguardando pacotes de dados...")
-    while True:
-        try:
-            header_bytes = recv_all(conn, DATA_HEADER_LEN)
-            if header_bytes is None:
-                if expected_seq_num > 0:
-                    print("\nCliente desconectou (provavelmente fim normal da transmissão).")
-                else:
-                    print("\nCliente desconectou ou erro fatal ao receber cabeçalho inicial.")
-                break
+                protocolo = None
+                janela = 1
 
-            packet_info = parse_data_header(header_bytes)
-            if packet_info is None:
-                continue
+                campos = handshake_info.split(';')
+                for campo in campos:
+                    if "PROTOCOLO" in campo:
+                        protocolo = campo.split(":")[1]
+                    elif "TAMANHO_JANELA" in campo:
+                        janela = int(campo.split(":")[1])
 
-            packet_type, seq_num, checksum_in_header, data_len = packet_info
+                client_socket.sendall(b"Handshake OK")
+                print(f"Protocolo escolhido: {protocolo}")
+                print(f"Tamanho da janela: {janela}")
 
-            if packet_type != PACKET_TYPE_DATA:
-                continue
-            if data_len < 0:
-                continue
+                expected_sequence = 0
+                full_message = ''
+                received_packets = {}
 
-            data_bytes = b''
-            if data_len > 0:
-                data_bytes = recv_all(conn, data_len)
-                if data_bytes is None:
-                    break
+                while True:
+                    try:
+                        packet = client_socket.recv(BUFFER_SIZE)
+                        if not packet:
+                            break
 
-            full_packet_bytes = header_bytes + data_bytes
-            if not verify_packet_checksum(full_packet_bytes):
-                continue
+                        seq_num, checksum_received, data = common_utils.parse_packet(packet)
+                        checksum_calculated = common_utils.calculate_checksum(data)
 
-            print(f"Pacote Recebido: SeqNum={seq_num}, TamDados={data_len}")
+                        print(f"Pacote recebido: Seq={seq_num}, Dados='{data}', Checksum={checksum_received}")
 
-            ack_num_to_send = -1
+                        if checksum_received != checksum_calculated:
+                            print("Checksum inválido! Ignorando pacote.")
+                            continue
 
-            if seq_num == expected_seq_num:
-                if data_bytes:
-                    reassembled_data.extend(data_bytes)
-                ack_num_to_send = seq_num
-                expected_seq_num += 1
-            elif seq_num < expected_seq_num:
-                ack_num_to_send = seq_num
-            else:
-                ack_num_to_send = -1
+                        if protocolo == "GBN":
+                            if seq_num == expected_sequence % 256:
+                                print(f"Pacote esperado (Seq={seq_num}).")
+                                full_message += data
+                                ack = common_utils.create_ack(seq_num)
+                                client_socket.sendall(ack)
+                                print(f"ACK enviado para Seq={seq_num}")
+                                expected_sequence = (expected_sequence + 1) % 256
+                            else:
+                                print(f"Pacote fora de ordem (esperado {expected_sequence % 256}). Ignorado.")
+                                last_ack = common_utils.create_ack((expected_sequence - 1) % 256)
+                                client_socket.sendall(last_ack)
+                        elif protocolo == "SR":
+                            if seq_num not in received_packets:
+                                received_packets[seq_num] = data
+                                print(f"Pacote armazenado (SR) Seq={seq_num}.")
 
-            if ack_num_to_send != -1:
-                ack_packet = create_ack_packet(ack_num_to_send)
-                action = "Enviando" if seq_num == ack_num_to_send else "Reenviando"
-                print(f"{action} ACK para {ack_num_to_send}...")
-                try:
-                    conn.sendall(ack_packet)
-                except socket.error as e:
-                    print(f"Erro ao {action.lower()} ACK para {ack_num_to_send}: {e}")
-                    break
+                            ack = common_utils.create_ack(seq_num)
+                            client_socket.sendall(ack)
+                            print(f"ACK individual enviado para Seq={seq_num}")
 
-        except socket.timeout:
-            print("Timeout no servidor esperando pacote.")
-            continue
-        except ConnectionResetError:
-            print("\nCliente fechou a conexão abruptamente.")
-            break
-        except socket.error as e:
-            print(f"Erro de socket: {e}")
-            break
-        except Exception as e:
-            print(f"Erro inesperado: {e}")
-            import traceback
-            traceback.print_exc()
-            break
+                    except Exception as e:
+                        print(f"Erro na recepção do pacote: {e}")
+                        break
 
-    print("\n--- Comunicação com o cliente encerrada ---")
-    if reassembled_data:
-        print(f"Total de dados remontados: {len(reassembled_data)} bytes.")
-        print("Dados (início):")
-        try:
-            preview = reassembled_data[:200].decode('utf-8', errors='replace')
-            print(preview + ('...' if len(reassembled_data) > 200 else ''))
-        except Exception:
-            print(f"{reassembled_data[:200]}...")
-    else:
-        print("Nenhum dado foi remontado.")
+                if protocolo == "SR":
+                    for i in sorted(received_packets.keys()):
+                        full_message += received_packets[i]
 
-except Exception as e:
-    print(f"Erro geral no servidor: {e}")
-finally:
-    if conn:
-        print(f"Fechando conexão com {client_addr}.")
-        conn.close()
-    if server_sock:
-        print("Fechando socket do servidor.")
-        server_sock.close()
-    print("Servidor encerrado.")
+                print(f"\nMensagem completa recebida do cliente: {full_message}")
+
+            except Exception as e:
+                print(f"Erro na conexão com {addr}: {e}")
+            finally:
+                client_socket.close()
+                print(f"Conexão encerrada com {addr}")
+
+    except KeyboardInterrupt:
+        print("\nServidor encerrado manualmente.")
+    finally:
+        server_socket.close()
+
+if __name__ == "__main__":
+    start_server()
