@@ -39,55 +39,62 @@ def start_client(host='localhost', port=12345):
         server_response = client_socket.recv(1024)
         print(f"Resposta do servidor: {server_response.decode()}")
 
-        message = input("\nDigite a mensagem para enviar: ")
+        while True:
+            message = input("\nDigite a mensagem para enviar (ou 'sair' para terminar): ")
+            if message.lower() == 'sair':
+                break
 
-        packets = [message[i:i+MAX_PAYLOAD_SIZE] for i in range(0, len(message), MAX_PAYLOAD_SIZE)]
-        total_packets = len(packets)
+            packets = [message[i:i+MAX_PAYLOAD_SIZE] for i in range(0, len(message), MAX_PAYLOAD_SIZE)]
+            total_packets = len(packets)
 
-        base = 0
-        next_seq_num = 0
-        acked = [False] * total_packets
-        timers = {}
+            base = 0
+            next_seq_num = 0
+            acked = [False] * total_packets
+            timers = {}
 
-        client_socket.settimeout(0.5)
+            client_socket.settimeout(0.5)
 
-        print_window(base, next_seq_num)
+            print_window(base, next_seq_num)
 
-        while base < total_packets:
-            while next_seq_num < base + WINDOW_SIZE and next_seq_num < total_packets:
-                packet = common_utils.create_packet(next_seq_num % 256, packets[next_seq_num])
-                client_socket.sendall(packet)
-                print(f"Enviado pacote Seq={next_seq_num % 256}, Dados='{packets[next_seq_num]}'")
-                timers[next_seq_num] = time.time()
-                next_seq_num += 1
+            while base < total_packets:
+                while next_seq_num < base + WINDOW_SIZE and next_seq_num < total_packets:
+                    packet = common_utils.create_packet(next_seq_num % 256, packets[next_seq_num])
+                    client_socket.sendall(packet)
+                    print(f"Enviado pacote Seq={next_seq_num % 256}, Dados='{packets[next_seq_num]}'")
+                    timers[next_seq_num] = time.time()
+                    next_seq_num += 1
 
-            try:
-                ack_packet = client_socket.recv(1024)
-                ack_seq = common_utils.parse_ack(ack_packet)
-                print(f"ACK recebido: {ack_seq}")
+                try:
+                    ack_packet = client_socket.recv(1024)
+                    ack_seq = common_utils.parse_ack(ack_packet)
+                    print(f"ACK recebido: {ack_seq}")
 
-                if protocol == "GBN":
-                    if ack_seq == base % 256:
-                        base += 1
-                        print_window(base, next_seq_num)
-                elif protocol == "SR":
-                    for idx in range(len(packets)):
-                        if idx % 256 == ack_seq:
-                            acked[idx] = True
-                            print(f"Pacote {idx} confirmado pelo servidor (SR).")
-                            break
-                    while base < total_packets and acked[base]:
-                        base += 1
-                        print_window(base, next_seq_num)
+                    if protocol == "GBN":
+                        if (base % 256) <= ack_seq:
+                            deslocamento = (ack_seq - (base % 256)) + 1
+                            for confirmed_seq in range(base, base + deslocamento):
+                                print(f"Pacote {confirmed_seq} confirmado pelo servidor (GBN).")
+                            base += deslocamento
+                            print_window(base, next_seq_num)
 
-            except Exception:
-                current_time = time.time()
-                for idx in range(base, min(base + WINDOW_SIZE, total_packets)):
-                    if not acked[idx] and (current_time - timers.get(idx, current_time)) > TIMEOUT:
-                        packet = common_utils.create_packet(idx % 256, packets[idx])
-                        client_socket.sendall(packet)
-                        print(f"Timeout! Reenviando pacote Seq={idx % 256}, Dados='{packets[idx]}'")
-                        timers[idx] = time.time()
+                    elif protocol == "SR":
+                        for idx in range(len(packets)):
+                            if idx % 256 == ack_seq:
+                                acked[idx] = True
+                                print(f"Pacote {idx} confirmado pelo servidor (SR).")
+                                break
+                        while base < total_packets and acked[base]:
+                            base += 1
+                            print_window(base, next_seq_num)
+
+                except Exception:
+                    current_time = time.time()
+                    for idx in range(base, min(base + WINDOW_SIZE, total_packets)):
+                        if not acked[idx] and (current_time - timers.get(idx, current_time)) > TIMEOUT:
+                            packet = common_utils.create_packet(idx % 256, packets[idx])
+                            client_socket.sendall(packet)
+                            print(f"Timeout! Reenviando pacote Seq={idx % 256}, Dados='{packets[idx]}'")
+                            timers[idx] = time.time()
 
     except Exception as e:
         print(f"Erro: {e}")

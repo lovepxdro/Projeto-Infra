@@ -37,55 +37,63 @@ def start_server(host='localhost', port=12345):
                 print(f"Protocolo escolhido: {protocolo}")
                 print(f"Tamanho da janela: {janela}")
 
-                expected_sequence = 0
-                full_message = ''
-                received_packets = {}
+                while True:  # loop para várias mensagens no mesmo socket
+                    expected_sequence = 0
+                    full_message = ''
+                    received_packets = {}
 
-                while True:
-                    try:
-                        packet = client_socket.recv(BUFFER_SIZE)
-                        if not packet:
-                            break
+                    while True:
+                        try:
+                            packet = client_socket.recv(BUFFER_SIZE)
+                            if not packet:
+                                raise ConnectionError("Cliente desconectado.")
 
-                        seq_num, checksum_received, data = common_utils.parse_packet(packet)
-                        checksum_calculated = common_utils.calculate_checksum(data)
+                            seq_num, checksum_received, data = common_utils.parse_packet(packet)
+                            checksum_calculated = common_utils.calculate_checksum(data)
 
-                        print(f"Pacote recebido: Seq={seq_num}, Dados='{data}', Checksum={checksum_received}")
+                            print(f"Pacote recebido: Seq={seq_num}, Dados='{data}', Checksum={checksum_received}")
 
-                        if checksum_received != checksum_calculated:
-                            print("Checksum inválido! Ignorando pacote.")
-                            continue
+                            if checksum_received != checksum_calculated:
+                                print("Checksum inválido! Ignorando pacote.")
+                                continue
 
-                        if protocolo == "GBN":
-                            if seq_num == expected_sequence % 256:
-                                print(f"Pacote esperado (Seq={seq_num}).")
-                                full_message += data
+                            if protocolo == "GBN":
+                                if seq_num == expected_sequence % 256:
+                                    print(f"Pacote esperado (Seq={seq_num}).")
+                                    full_message += data
+                                    ack = common_utils.create_ack(seq_num)
+                                    client_socket.sendall(ack)
+                                    print(f"ACK enviado para Seq={seq_num}")
+                                    expected_sequence = (expected_sequence + 1) % 256
+                                else:
+                                    print(f"Pacote fora de ordem (esperado {expected_sequence % 256}). Ignorado.")
+                                    last_ack = common_utils.create_ack((expected_sequence - 1) % 256)
+                                    client_socket.sendall(last_ack)
+
+                            elif protocolo == "SR":
+                                if seq_num not in received_packets:
+                                    received_packets[seq_num] = data
+                                    print(f"Pacote armazenado (SR) Seq={seq_num}.")
+
                                 ack = common_utils.create_ack(seq_num)
                                 client_socket.sendall(ack)
-                                print(f"ACK enviado para Seq={seq_num}")
-                                expected_sequence = (expected_sequence + 1) % 256
-                            else:
-                                print(f"Pacote fora de ordem (esperado {expected_sequence % 256}). Ignorado.")
-                                last_ack = common_utils.create_ack((expected_sequence - 1) % 256)
-                                client_socket.sendall(last_ack)
-                        elif protocolo == "SR":
-                            if seq_num not in received_packets:
-                                received_packets[seq_num] = data
-                                print(f"Pacote armazenado (SR) Seq={seq_num}.")
+                                print(f"ACK individual enviado para Seq={seq_num}")
 
-                            ack = common_utils.create_ack(seq_num)
-                            client_socket.sendall(ack)
-                            print(f"ACK individual enviado para Seq={seq_num}")
+                        except Exception as e:
+                            print(f"Erro na recepção do pacote: {e}")
+                            break
 
-                    except Exception as e:
-                        print(f"Erro na recepção do pacote: {e}")
-                        break
+                    if protocolo == "GBN":
+                        if full_message.strip() != '':
+                            print(f"\nMensagem completa recebida do cliente (GBN): {full_message}")
 
-                if protocolo == "SR":
-                    for i in sorted(received_packets.keys()):
-                        full_message += received_packets[i]
+                    elif protocolo == "SR":
+                        mensagem_final = ''
+                        for i in sorted(received_packets.keys()):
+                            mensagem_final += received_packets[i]
 
-                print(f"\nMensagem completa recebida do cliente: {full_message}")
+                        if mensagem_final.strip() != '':
+                            print(f"\nMensagem completa recebida do cliente (SR): {mensagem_final}")
 
             except Exception as e:
                 print(f"Erro na conexão com {addr}: {e}")
