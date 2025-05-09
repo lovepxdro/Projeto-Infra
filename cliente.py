@@ -1,15 +1,20 @@
 import common_utils
 import time
+import random
 
-TIMEOUT = 2  # segundos
-MAX_PAYLOAD_SIZE = 3  # máximo de caracteres por pacote
-WINDOW_SIZE = 4  # tamanho da janela
+TIMEOUT = 2
+MAX_PAYLOAD_SIZE = 3
+WINDOW_SIZE = 4
+
+LOSS_PROBABILITY = 0.2
+CORRUPTION_PROBABILITY = 0.1
+ACK_LOSS_PROBABILITY = 0.1
+ACK_CORRUPTION_PROBABILITY = 0.1
 
 def choose_protocol():
     print("\nEscolha o protocolo de comunicação:")
     print("1 - Go-Back-N")
     print("2 - Repetição Seletiva")
-    
     while True:
         choice = input("Digite sua escolha (1 ou 2): ")
         if choice == '1':
@@ -33,7 +38,6 @@ def start_client(host='localhost', port=12345):
         print(f"Conectado ao servidor {host}:{port}")
 
         protocol = choose_protocol()
-
         handshake_message = f"PROTOCOLO:{protocol};TAMANHO_JANELA:{WINDOW_SIZE};TAMANHO_PACOTE:{MAX_PAYLOAD_SIZE}"
         client_socket.sendall(handshake_message.encode())
         server_response = client_socket.recv(1024)
@@ -51,29 +55,54 @@ def start_client(host='localhost', port=12345):
             next_seq_num = 0
             acked = [False] * total_packets
             timers = {}
-
             client_socket.settimeout(0.5)
 
             print_window(base, next_seq_num)
 
             while base < total_packets:
                 while next_seq_num < base + WINDOW_SIZE and next_seq_num < total_packets:
-                    packet = common_utils.create_packet(next_seq_num % 256, packets[next_seq_num])
-                    client_socket.sendall(packet)
-                    print(f"Enviado pacote Seq={next_seq_num % 256}, Dados='{packets[next_seq_num]}'")
+                    data = packets[next_seq_num]
+                    seq = next_seq_num % 256
+
+                    # Simula corrupção
+                    if random.random() < CORRUPTION_PROBABILITY:
+                        corrupted_data = "###"
+                        packet = common_utils.create_packet(seq, corrupted_data)
+                        print(f"❌ Pacote Seq={seq} CORROMPIDO (simulação)")
+                    else:
+                        packet = common_utils.create_packet(seq, data)
+
+                    # Simula perda de pacote
+                    if random.random() < LOSS_PROBABILITY:
+                        print(f"⚠️ Pacote Seq={seq} PERDIDO (simulação)")
+                    else:
+                        client_socket.sendall(packet)
+                        print(f"📤 Enviado pacote Seq={seq}, Dados='{data}'")
+
                     timers[next_seq_num] = time.time()
                     next_seq_num += 1
 
                 try:
                     ack_packet = client_socket.recv(1024)
+
+                    # Simula perda de ACK
+                    if random.random() < ACK_LOSS_PROBABILITY:
+                        print("⚠️ ACK PERDIDO (simulação)")
+                        continue
+
+                    # Simula corrupção de ACK
+                    if random.random() < ACK_CORRUPTION_PROBABILITY:
+                        print("❌ ACK CORROMPIDO (simulação)")
+                        continue
+
                     ack_seq = common_utils.parse_ack(ack_packet)
-                    print(f"ACK recebido: {ack_seq}")
+                    print(f"✅ ACK recebido: {ack_seq}")
 
                     if protocol == "GBN":
                         if (base % 256) <= ack_seq:
                             deslocamento = (ack_seq - (base % 256)) + 1
-                            for confirmed_seq in range(base, base + deslocamento):
-                                print(f"Pacote {confirmed_seq} confirmado pelo servidor (GBN).")
+                            for i in range(base, base + deslocamento):
+                                print(f"✔️ Pacote {i} confirmado (GBN)")
                             base += deslocamento
                             print_window(base, next_seq_num)
 
@@ -81,7 +110,7 @@ def start_client(host='localhost', port=12345):
                         for idx in range(len(packets)):
                             if idx % 256 == ack_seq:
                                 acked[idx] = True
-                                print(f"Pacote {idx} confirmado pelo servidor (SR).")
+                                print(f"✔️ Pacote {idx} confirmado (SR)")
                                 break
                         while base < total_packets and acked[base]:
                             base += 1
@@ -93,7 +122,7 @@ def start_client(host='localhost', port=12345):
                         if not acked[idx] and (current_time - timers.get(idx, current_time)) > TIMEOUT:
                             packet = common_utils.create_packet(idx % 256, packets[idx])
                             client_socket.sendall(packet)
-                            print(f"Timeout! Reenviando pacote Seq={idx % 256}, Dados='{packets[idx]}'")
+                            print(f"⏱️ Timeout! Reenviando pacote Seq={idx % 256}, Dados='{packets[idx]}'")
                             timers[idx] = time.time()
 
     except Exception as e:
