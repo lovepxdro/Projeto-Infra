@@ -25,6 +25,21 @@ Projeto de implementação de comunicação entre Cliente e Servidor via **socke
   - **Selective Repeat**: ACKs individuais e reenvio apenas dos pacotes perdidos.
 - Controle de **timeout** e **retransmissão automática**.
 
+### ✅ Entrega 3
+
+- Implementação de **simulações de falhas na comunicação**, com comportamento adequado dos protocolos frente aos erros.
+- **Erros simulados**:
+  - **Perda de pacotes**: Pacotes podem ser descartados aleatoriamente ou por simulação forçada.
+  - **Corrupção de pacotes**: Conteúdo do pacote é intencionalmente alterado e detectado via checksum.
+  - **Perda de ACKs**: ACKs podem ser "perdidos" antes de chegar ao cliente, simulando falhas de rede.
+  - **Corrupção de ACKs**: ACKs podem ser corrompidos no trajeto, sendo ignorados pelo cliente.
+- **Mecanismos de detecção e recuperação**:
+  - Uso de **checksum** para checagem de integridade dos dados recebidos.
+  - **Timeouts** com retransmissão automática dos pacotes não confirmados.
+  - Tratamento conforme o protocolo escolhido:
+    - **Go-Back-N (GBN)**: reenvio de toda a janela ao detectar falha.
+    - **Selective Repeat (SR)**: reenvio individual apenas dos pacotes perdidos ou corrompidos.
+
 ---
 
 # 👩‍💻 Membros da Equipe
