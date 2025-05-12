@@ -99,22 +99,27 @@ def start_client(host='localhost', port=12345):
                     print(f"✅ ACK recebido: {ack_seq}")
 
                     if protocol == "GBN":
-                        if (base % 256) <= ack_seq:
-                            deslocamento = (ack_seq - (base % 256)) + 1
+                        expected_ack_min = base % 256
+                        expected_ack_max = (base + WINDOW_SIZE - 1) % 256
+
+                        # Verifica se ack_seq está dentro do intervalo esperado da janela
+                        if expected_ack_min <= ack_seq <= expected_ack_max:
+                            deslocamento = (ack_seq - expected_ack_min) + 1
                             for i in range(base, base + deslocamento):
                                 print(f"✔️ Pacote {i} confirmado (GBN)")
                             base += deslocamento
                             print_window(base, next_seq_num)
+                        else:
+                            print(f"⚠️ ACK {ack_seq} fora da janela esperada ({expected_ack_min}-{expected_ack_max}). Ignorado.")
 
                     elif protocol == "SR":
-                        for idx in range(len(packets)):
+                        for idx in range(base, min(base + WINDOW_SIZE, total_packets)):
                             if idx % 256 == ack_seq:
                                 acked[idx] = True
                                 print(f"✔️ Pacote {idx} confirmado (SR)")
                                 break
-                        while base < total_packets and acked[base]:
-                            base += 1
-                            print_window(base, next_seq_num)
+                        else:
+                            print(f"⚠️ ACK {ack_seq} fora da janela esperada em SR. Ignorado.")
 
                 except Exception:
                     current_time = time.time()
