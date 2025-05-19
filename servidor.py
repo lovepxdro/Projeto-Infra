@@ -11,6 +11,7 @@ ACK_LOSS_PROBABILITY = 0.1
 ACK_CORRUPTION_PROBABILITY = 0.1
 
 def start_server(host='localhost', port=12345):
+    global MAX_PAYLOAD_SIZE, BUFFER_SIZE, LOSS_PROBABILITY, ACK_LOSS_PROBABILITY, CORRUPTION_PROBABILITY, ACK_CORRUPTION_PROBABILITY
     server_socket = common_utils.create_socket()
     if server_socket is None:
         print("Não foi possível iniciar o servidor.")
@@ -32,6 +33,8 @@ def start_server(host='localhost', port=12345):
 
                 protocolo = None
                 janela = 1
+                sem_perdas = "False"
+                sem_corrupcoes = "False"
 
                 campos = handshake_info.split(';')
                 for campo in campos:
@@ -39,6 +42,11 @@ def start_server(host='localhost', port=12345):
                         protocolo = campo.split(":")[1]
                     elif "TAMANHO_JANELA" in campo:
                         janela = int(campo.split(":")[1])
+                    elif "sem_perdas" in campo:
+                        sem_perdas = campo.split(":")[1]
+                    elif "sem_corrupções" in campo:
+                        sem_corrupcoes = campo.split(":")[1]
+
 
                 client_socket.sendall(b"Handshake OK")
                 print(f"Protocolo escolhido: {protocolo}")
@@ -60,7 +68,7 @@ def start_server(host='localhost', port=12345):
                         print(f"Pacote recebido: Seq={seq_num}, Dados='{data}', Checksum={checksum_received}")
 
                         # Corrupção simulada
-                        if random.random() < CORRUPTION_PROBABILITY:
+                        if (sem_corrupcoes == "False") and (random.random() < CORRUPTION_PROBABILITY):
                             print(f"❌ Pacote Seq={seq_num} CORROMPIDO (simulação)")
                             nack = common_utils.create_nack(seq_num)
                             client_socket.sendall(nack)
@@ -68,7 +76,7 @@ def start_server(host='localhost', port=12345):
                             continue
 
                         # Verificação de checksum
-                        if checksum_received != checksum_calculated:
+                        if (sem_corrupcoes == "False") and (checksum_received != checksum_calculated):
                             print("⚠️ Checksum inválido! Ignorando pacote.")
                             nack = common_utils.create_nack(seq_num)
                             client_socket.sendall(nack)
@@ -76,7 +84,7 @@ def start_server(host='localhost', port=12345):
                             continue
 
                         # Simula perda do pacote (ignorado com NACK)
-                        if random.random() < LOSS_PROBABILITY:
+                        if (sem_perdas == "False") and (random.random() < LOSS_PROBABILITY):
                             print(f"⚠️ Pacote Seq={seq_num} PERDIDO (simulação)")
                             nack = common_utils.create_nack(seq_num)
                             client_socket.sendall(nack)
@@ -90,10 +98,10 @@ def start_server(host='localhost', port=12345):
                                 ack = common_utils.create_ack(seq_num)
 
                                 # Simulação de perda/corrupção de ACK
-                                if random.random() < ACK_LOSS_PROBABILITY:
+                                if (sem_perdas == "False") and (random.random() < ACK_LOSS_PROBABILITY):
                                     print(f"⚠️ ACK para Seq={seq_num} PERDIDO (simulação)")
                                     continue
-                                if random.random() < ACK_CORRUPTION_PROBABILITY:
+                                if (sem_corrupcoes == "False") and (random.random() < ACK_CORRUPTION_PROBABILITY):
                                     print(f"❌ ACK para Seq={seq_num} CORROMPIDO (simulação)")
                                     client_socket.sendall(b"CORRUPTED_ACK")
                                     continue
@@ -116,10 +124,10 @@ def start_server(host='localhost', port=12345):
 
                             ack = common_utils.create_ack(seq_num)
 
-                            if random.random() < ACK_LOSS_PROBABILITY:
+                            if (sem_perdas == "False") and (random.random() < ACK_LOSS_PROBABILITY):
                                 print(f"⚠️ ACK para Seq={seq_num} PERDIDO (simulação)")
                                 continue
-                            if random.random() < ACK_CORRUPTION_PROBABILITY:
+                            if (sem_corrupcoes == "False") and (random.random() < ACK_CORRUPTION_PROBABILITY):
                                 print(f"❌ ACK para Seq={seq_num} CORROMPIDO (simulação)")
                                 client_socket.sendall(b"CORRUPTED_ACK")
                                 continue
