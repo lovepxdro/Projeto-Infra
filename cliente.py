@@ -50,10 +50,10 @@ def start_client(host='localhost', port=12345):
             if message.lower() == 'sair':
                 break
 
-            force_lost_input = input("Insira nº de pacotes a perder (ex: 1, 3) ou aperte Enter: ")
+            force_lost_input = input("Insira o nº do pacote individual a perder (ex: 1, 3) ou aperte Enter: ")
             FORCE_LOST = set(map(int, force_lost_input.split(','))) if force_lost_input else set()
 
-            force_corrupt_input = input("Insira nº de pacotes a corromper (ex: 2, 4) ou aperte Enter: ")
+            force_corrupt_input = input("Insira o nº de pacote individual a corromper (ex: 2, 4) ou aperte Enter: ")
             FORCE_CORRUPT = set(map(int, force_corrupt_input.split(','))) if force_corrupt_input else set()
 
             packets = [message[i:i+MAX_PAYLOAD_SIZE] for i in range(0, len(message), MAX_PAYLOAD_SIZE)]
