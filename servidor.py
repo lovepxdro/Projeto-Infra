@@ -1,4 +1,3 @@
-# ===servidor.py ===
 import common_utils
 import socket
 import random
@@ -49,7 +48,7 @@ def start_server(host='localhost', port=12345):
                 full_message = ''
                 received_packets = {}
 
-                while True:  # loop para várias mensagens no mesmo socket
+                while True:
                     try:
                         packet = client_socket.recv(BUFFER_SIZE)
                         if not packet:
@@ -60,19 +59,28 @@ def start_server(host='localhost', port=12345):
 
                         print(f"Pacote recebido: Seq={seq_num}, Dados='{data}', Checksum={checksum_received}")
 
-                        # Simula corrupção de pacotes recebidos
+                        # Corrupção simulada
                         if random.random() < CORRUPTION_PROBABILITY:
                             print(f"❌ Pacote Seq={seq_num} CORROMPIDO (simulação)")
-                            continue  # Ignora pacotes corrompidos
-
-                        # Verifica se o checksum está correto
-                        if checksum_received != checksum_calculated:
-                            print("⚠️ Checksum inválido! Ignorando pacote.")
+                            nack = common_utils.create_nack(seq_num)
+                            client_socket.sendall(nack)
+                            print(f"📢 NACK enviado para Seq={seq_num}")
                             continue
 
-                        # Simula perda de pacotes
+                        # Verificação de checksum
+                        if checksum_received != checksum_calculated:
+                            print("⚠️ Checksum inválido! Ignorando pacote.")
+                            nack = common_utils.create_nack(seq_num)
+                            client_socket.sendall(nack)
+                            print(f"📢 NACK enviado para Seq={seq_num}")
+                            continue
+
+                        # Simula perda do pacote (ignorado com NACK)
                         if random.random() < LOSS_PROBABILITY:
                             print(f"⚠️ Pacote Seq={seq_num} PERDIDO (simulação)")
+                            nack = common_utils.create_nack(seq_num)
+                            client_socket.sendall(nack)
+                            print(f"📢 NACK enviado para Seq={seq_num}")
                             continue
 
                         if protocolo == "GBN":
@@ -81,43 +89,39 @@ def start_server(host='localhost', port=12345):
                                 full_message += data
                                 ack = common_utils.create_ack(seq_num)
 
-                                # Simula perda de ACK
+                                # Simulação de perda/corrupção de ACK
                                 if random.random() < ACK_LOSS_PROBABILITY:
                                     print(f"⚠️ ACK para Seq={seq_num} PERDIDO (simulação)")
                                     continue
-
-                                # Simula corrupção de ACK
                                 if random.random() < ACK_CORRUPTION_PROBABILITY:
                                     print(f"❌ ACK para Seq={seq_num} CORROMPIDO (simulação)")
-                                    ack = b"CORRUPTED_ACK"
-                                    client_socket.sendall(ack)
+                                    client_socket.sendall(b"CORRUPTED_ACK")
                                     continue
 
                                 client_socket.sendall(ack)
                                 print(f"✅ ACK enviado para Seq={seq_num}")
                                 expected_sequence = (expected_sequence + 1) % 256
                             else:
-                                print(f"⚠️ Pacote fora de ordem (esperado {expected_sequence % 256}). Ignorado.")
-                                last_ack = common_utils.create_ack((expected_sequence - 1) % 256)
-                                client_socket.sendall(last_ack)
+                                print(f"⚠️ Pacote fora de ordem (esperado {expected_sequence % 256}).")
+                                nack = common_utils.create_nack(expected_sequence % 256)
+                                client_socket.sendall(nack)
+                                print(f"📢 NACK enviado (esperado {expected_sequence % 256})")
 
                         elif protocolo == "SR":
                             if seq_num not in received_packets:
                                 received_packets[seq_num] = data
                                 print(f"✔️ Pacote armazenado (SR) Seq={seq_num}.")
+                            else:
+                                print(f"⚠️ Pacote duplicado Seq={seq_num}. Enviando ACK mesmo assim.")
 
                             ack = common_utils.create_ack(seq_num)
 
-                            # Simula perda de ACK
                             if random.random() < ACK_LOSS_PROBABILITY:
                                 print(f"⚠️ ACK para Seq={seq_num} PERDIDO (simulação)")
                                 continue
-
-                            # Simula corrupção de ACK
                             if random.random() < ACK_CORRUPTION_PROBABILITY:
                                 print(f"❌ ACK para Seq={seq_num} CORROMPIDO (simulação)")
-                                ack = b"CORRUPTED_ACK"
-                                client_socket.sendall(ack)
+                                client_socket.sendall(b"CORRUPTED_ACK")
                                 continue
 
                             client_socket.sendall(ack)
@@ -127,16 +131,12 @@ def start_server(host='localhost', port=12345):
                         print(f"Erro na recepção do pacote: {e}")
                         break
 
-                if protocolo == "GBN":
-                    if full_message.strip() != '':
-                        print(f"\nMensagem completa recebida do cliente (GBN): {full_message}")
+                if protocolo == "GBN" and full_message.strip():
+                    print(f"\nMensagem completa recebida do cliente (GBN): {full_message}")
 
                 elif protocolo == "SR":
-                    mensagem_final = ''
-                    for i in sorted(received_packets.keys()):
-                        mensagem_final += received_packets[i]
-
-                    if mensagem_final.strip() != '':
+                    mensagem_final = ''.join(received_packets[i] for i in sorted(received_packets.keys()))
+                    if mensagem_final.strip():
                         print(f"\nMensagem completa recebida do cliente (SR): {mensagem_final}")
 
             except Exception as e:

@@ -1,4 +1,3 @@
-# === common_utils.py ===
 import socket
 import struct
 import hashlib
@@ -24,9 +23,21 @@ def parse_packet(packet):
     data = packet[5:].decode()
     return seq_num, checksum.decode(), data
 
+# ACK e NACK agora incluem identificador ('A' ou 'N') seguido do número de sequência
 def create_ack(seq_num):
-    return struct.pack('!B', seq_num)
+    return struct.pack('!cB', b'A', seq_num)
 
 def parse_ack(ack_packet):
-    seq_num, = struct.unpack('!B', ack_packet)
+    tipo, seq_num = struct.unpack('!cB', ack_packet)
+    if tipo != b'A':
+        raise ValueError("Pacote não é um ACK válido.")
+    return seq_num
+
+def create_nack(seq_num):
+    return struct.pack('!cB', b'N', seq_num)
+
+def parse_nack(nack_packet):
+    tipo, seq_num = struct.unpack('!cB', nack_packet)
+    if tipo != b'N':
+        raise ValueError("Pacote não é um NACK válido.")
     return seq_num
