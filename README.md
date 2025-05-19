@@ -1,4 +1,4 @@
-#  Projeto: Infraestrutura de Comunicação
+#  Projeto Infraestrutura de Comunicação - Aplicação Cliente-Servidor
 
 ## 📚 Descrição
 
