@@ -1,3 +1,4 @@
+# ===cliente.py ===
 import common_utils
 import time
 import random
@@ -10,6 +11,8 @@ LOSS_PROBABILITY = 0.2
 CORRUPTION_PROBABILITY = 0.1
 ACK_LOSS_PROBABILITY = 0.1
 ACK_CORRUPTION_PROBABILITY = 0.1
+FORCE_LOST = set()         # Ex: {1, 3} força perda dos pacotes 1 e 3
+FORCE_CORRUPT = set()      # Ex: {2} força corrupção do pacote 2
 
 def choose_protocol():
     print("\nEscolha o protocolo de comunicação:")
@@ -48,6 +51,14 @@ def start_client(host='localhost', port=12345):
             if message.lower() == 'sair':
                 break
 
+            # Entrada de pacotes a forçar erro
+            force_lost_input = input("Insira nº de pacotes a perder (ex: 1, 3) ou aperte Enter (se não quiser): ")
+            FORCE_LOST = set(map(int, force_lost_input.split(','))) if force_lost_input else set()
+
+            force_corrupt_input = input("Insira nº de pacotes a corromper (ex: 2, 4) ou aperte Enter (se não quiser): ")
+            FORCE_CORRUPT = set(map(int, force_corrupt_input.split(','))) if force_corrupt_input else set()
+
+
             packets = [message[i:i+MAX_PAYLOAD_SIZE] for i in range(0, len(message), MAX_PAYLOAD_SIZE)]
             total_packets = len(packets)
 
@@ -64,17 +75,17 @@ def start_client(host='localhost', port=12345):
                     data = packets[next_seq_num]
                     seq = next_seq_num % 256
 
-                    # Simula corrupção
-                    if random.random() < CORRUPTION_PROBABILITY:
+                    # Simula ou força corrupção
+                    if seq in FORCE_CORRUPT or random.random() < CORRUPTION_PROBABILITY:
                         corrupted_data = "###"
                         packet = common_utils.create_packet(seq, corrupted_data)
-                        print(f"❌ Pacote Seq={seq} CORROMPIDO (simulação)")
+                        print(f"❌ Pacote Seq={seq} CORROMPIDO {'(forçado)' if seq in FORCE_CORRUPT else '(simulação)'}")
                     else:
                         packet = common_utils.create_packet(seq, data)
 
-                    # Simula perda de pacote
-                    if random.random() < LOSS_PROBABILITY:
-                        print(f"⚠️ Pacote Seq={seq} PERDIDO (simulação)")
+                    # Simula ou força perda
+                    if seq in FORCE_LOST or random.random() < LOSS_PROBABILITY:
+                        print(f"⚠️ Pacote Seq={seq} PERDIDO {'(forçado)' if seq in FORCE_LOST else '(simulação)'}")
                     else:
                         client_socket.sendall(packet)
                         print(f"📤 Enviado pacote Seq={seq}, Dados='{data}'")
@@ -120,6 +131,11 @@ def start_client(host='localhost', port=12345):
                                 break
                         else:
                             print(f"⚠️ ACK {ack_seq} fora da janela esperada em SR. Ignorado.")
+
+                        # 👉 Após marcar o ACK, verifique se pode avançar a base
+                        while base < total_packets and acked[base]:
+                            base += 1
+                            print_window(base, next_seq_num)
 
                 except Exception:
                     current_time = time.time()
