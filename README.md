@@ -1,5 +1,5 @@
-#  Projeto Infraestrutura de Comunicação
-# Aplicação Cliente-Servidor
+# Infraestrutura de Comunicação – Aplicação Cliente-Servidor
+
 
 ## 📚 Descrição
 
