@@ -53,7 +53,7 @@ def start_client(host='localhost', port=12345):
                 sem_perdas = "False"
 
             force_corrupt_input = input("\nEnter - Simulação com corrupções || -1 - Simulação sem corrupções || \nInserção de qualquer outro nº - Pacote específico que gostaria de corromper:  ")
-            if force_lost_input != "-1":
+            if force_corrupt_input != "-1":
                 FORCE_CORRUPT = set(map(int, force_corrupt_input.split(','))) if force_corrupt_input else set()
                 sem_corrupcoes = "False"
 
