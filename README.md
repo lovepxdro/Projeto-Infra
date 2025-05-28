@@ -138,13 +138,13 @@ O objetivo é simular uma camada de transporte robusta, capaz de lidar com perda
 Durante o desenvolvimento, alguns desafios foram identificados e abordados para aprimorar a robustez e usabilidade do sistema:
 
 *   **Inconsistências nos outputs durante a comunicação:**
-    *   *Melhoria:* Foram realizadas revisões no fluxo de logs e mensagens de status para tornar o acompanhamento da comunicação mais claro e preciso.
+    *   *Melhoria:* Realizar revisões no fluxo de logs e mensagens de status para tornar o acompanhamento da comunicação mais claro e preciso.
 *   **Menu interativo complexo com opções não totalmente integradas:**
-    *   *Melhoria:* O menu foi simplificado, focando nas configurações essenciais e garantindo que todas as opções tivessem impacto direto e testável na simulação.
+    *   *Melhoria:* Simplificar, focando nas configurações essenciais e garantindo que todas as opções tivessem impacto direto e testável na simulação.
 *   **Duplicação na verificação de corrupção (checksum + probabilidade aleatória):**
-    *   *Melhoria:* O sistema de verificação de integridade foi unificado. A simulação de corrupção introduz o erro, e o mecanismo de checksum é o responsável por detectá-lo, tornando o processo mais realista.
+    *   *Melhoria:* Unificar o sistema de verificação de integridade. A simulação de corrupção introduz o erro, e o mecanismo de checksum é o responsável por detectá-lo, tornando o processo mais realista.
 *   **Falta de logs claros durante o fluxo de erros:**
-    *   *Melhoria:* Aprimoramento significativo nos logs de comunicação, especialmente durante a ocorrência e tratamento de erros, facilitando a depuração e a compreensão do comportamento dos protocolos.
+    *   *Melhoria:* Aprimorar os logs de comunicação, especialmente durante a ocorrência e tratamento de erros, facilitando a depuração e a compreensão do comportamento dos protocolos.
 *   **Correção do comportamento da janela deslizante:**
     *   *Melhoria:* Ajustes finos na lógica de avanço da janela, envio, recebimento de ACKs e tratamento de timeouts para garantir a conformidade com os protocolos GBN e SR.
 
@@ -155,8 +155,6 @@ Durante o desenvolvimento, alguns desafios foram identificados e abordados para 
 *   A criticidade dos temporizadores (timeouts) para a detecção de perdas e a necessidade de um ajuste cuidadoso para evitar retransmissões desnecessárias ou demoras excessivas.
 *   A diferença fundamental na complexidade de implementação e na eficiência de recuperação entre Go-Back-N e Selective Repeat.
 *   A necessidade de mecanismos de detecção de erro (como checksum) para garantir a integridade dos dados, mesmo sobre um protocolo de transporte teoricamente confiável como o TCP (aqui simulamos erros *acima* do TCP, na nossa camada de aplicação).
-
-*(As notas obtidas nas entregas foram omitidas por serem informações internas da disciplina e não relevantes para um README público do projeto.)*
 
 ---
 
